@@ -293,7 +293,7 @@ func _generate_flat_tiles() -> void:
 				T_WATER:    water_pos.append(pos)
 
 	_add_multimesh_tiles(road_pos, Globals.ROAD_Y, _mat_road)
-	_add_multimesh_tiles(sidewalk_pos, Globals.SIDEWALK_Y, _mat_sidewalk)
+	_build_sidewalks(sidewalk_pos)
 	_add_multimesh_tiles(grass_pos, 0.01, _mat_grass)
 	_add_multimesh_tiles(water_pos, -0.08, _mat_water)
 
@@ -311,6 +311,42 @@ func _add_multimesh_tiles(positions: Array[Vector3], y_off: float, mat: Standard
 		var t := Transform3D.IDENTITY
 		t.origin = Vector3(positions[i].x, y_off, positions[i].z)
 		mm.set_instance_transform(i, t)
+	var mmi := MultiMeshInstance3D.new()
+	mmi.multimesh = mm
+	add_child(mmi)
+
+func _build_sidewalks(positions: Array[Vector3]) -> void:
+	if positions.is_empty(): return
+	var h := 0.3
+	var box := BoxMesh.new()
+	box.size = Vector3(Globals.TILE_3D, h, Globals.TILE_3D)
+	box.material = _mat_sidewalk
+	
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.mesh = box
+	mm.instance_count = positions.size()
+	
+	var cbox := BoxShape3D.new()
+	cbox.size = Vector3(Globals.TILE_3D, h, Globals.TILE_3D)
+	
+	for i in positions.size():
+		var pos = positions[i]
+		var y_off = h * 0.5
+		var t := Transform3D.IDENTITY
+		t.origin = Vector3(pos.x, y_off, pos.z)
+		mm.set_instance_transform(i, t)
+		
+		var sb := StaticBody3D.new()
+		sb.collision_layer = 1
+		sb.collision_mask = 0
+		sb.position = Vector3(pos.x, y_off, pos.z)
+		
+		var cs := CollisionShape3D.new()
+		cs.shape = cbox
+		sb.add_child(cs)
+		add_child(sb)
+		
 	var mmi := MultiMeshInstance3D.new()
 	mmi.multimesh = mm
 	add_child(mmi)
@@ -455,24 +491,26 @@ func _add_landmark_building(pos: Vector3, mat: StandardMaterial3D, h: float, _ty
 func _generate_street_lamps() -> void:
 	for y in Globals.MAP_H:
 		for x in Globals.MAP_W:
-			if grid[y][x] != T_ROAD:
+			if grid[y][x] != T_SIDEWALK:
 				continue
 			if x % Globals.LAMP_SPACING != 0 and y % Globals.LAMP_SPACING != 0:
 				continue
-			if not _is_road_edge(x, y):
+			if not _is_sidewalk_near_road(x, y):
 				continue
-			_add_street_lamp(_tile_pos(x, y))
+			var pos := _tile_pos(x, y)
+			pos.y = 0.3 # Top of sidewalk
+			_add_street_lamp(pos)
 
-func _is_road_edge(x: int, y: int) -> bool:
+func _is_sidewalk_near_road(x: int, y: int) -> bool:
 	for dx in [-1, 1]:
 		var nx: int = x + dx
 		if nx >= 0 and nx < Globals.MAP_W:
-			if grid[y][nx] != T_ROAD:
+			if grid[y][nx] == T_ROAD:
 				return true
 	for dy in [-1, 1]:
 		var ny: int = y + dy
 		if ny >= 0 and ny < Globals.MAP_H:
-			if grid[ny][x] != T_ROAD:
+			if grid[ny][x] == T_ROAD:
 				return true
 	return false
 
@@ -520,7 +558,9 @@ func get_sidewalk_positions() -> Array[Vector3]:
 	for y in Globals.MAP_H:
 		for x in Globals.MAP_W:
 			if grid[y][x] == T_SIDEWALK:
-				result.append(_tile_pos(x, y))
+				var pos := _tile_pos(x, y)
+				pos.y = 0.3
+				result.append(pos)
 	return result
 
 func get_world_bounds() -> AABB:
