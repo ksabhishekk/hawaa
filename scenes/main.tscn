@@ -1,0 +1,49 @@
+[gd_scene load_steps=6 format=3 uid="uid://hawaa_main"]
+
+[ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
+[ext_resource type="Script" path="res://scripts/map_gen.gd" id="2_mapgen"]
+[ext_resource type="Script" path="res://scripts/minimap.gd" id="3_minimap"]
+[ext_resource type="PackedScene" path="res://scenes/auto.tscn" id="4_auto"]
+[ext_resource type="PackedScene" path="res://scenes/passenger_card.tscn" id="5_card"]
+
+[node name="Main" type="Node2D"]
+script = ExtResource("1_main")
+
+[node name="TileMap" type="TileMap" parent="."]
+script = ExtResource("2_mapgen")
+
+[node name="Auto" parent="." instance=ExtResource("4_auto")]
+position = Vector2(-16, 768)
+
+[node name="HUD" type="CanvasLayer" parent="."]
+
+[node name="Minimap" type="Control" parent="HUD"]
+anchor_left = 1.0
+anchor_right = 1.0
+anchor_top = 0.0
+anchor_bottom = 0.0
+offset_left = -165.0
+offset_top = 15.0
+offset_right = -15.0
+offset_bottom = 165.0
+script = ExtResource("3_minimap")
+
+[node name="PassengerCard" parent="HUD" instance=ExtResource("5_card")]
+
+[node name="Seawoods Station" type="Node2D" parent="."]
+position = Vector2(-240, -112)
+
+[node name="Nexus Mall" type="Node2D" parent="."]
+position = Vector2(368, 192)
+
+[node name="Seawoods Lake" type="Node2D" parent="."]
+position = Vector2(-1248, 496)
+
+[node name="Nerul Station" type="Node2D" parent="."]
+position = Vector2(1136, -96)
+
+[node name="Sector 44 Bus Stop" type="Node2D" parent="."]
+position = Vector2(-944, -640)
+
+[node name="Palm Beach Road End" type="Node2D" parent="."]
+position = Vector2(1520, 768)

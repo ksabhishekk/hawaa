@@ -1,0 +1,30 @@
+[gd_scene load_steps=4 format=3 uid="uid://hawaa_npc"]
+
+[ext_resource type="Script" path="res://scripts/npc.gd" id="1_npc"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_body"]
+size = Vector2(14, 28)
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_prox"]
+radius = 120.0
+
+[node name="NPC" type="CharacterBody2D"]
+script = ExtResource("1_npc")
+
+[node name="Sprite2D" type="Sprite2D" parent="."]
+
+[node name="BodyShape" type="CollisionShape2D" parent="."]
+shape = SubResource("RectangleShape2D_body")
+
+[node name="ProximityArea" type="Area2D" parent="."]
+
+[node name="ProxShape" type="CollisionShape2D" parent="ProximityArea"]
+shape = SubResource("CircleShape2D_prox")
+
+[node name="ExclLabel" type="Label" parent="."]
+offset_left = -12.0
+offset_top = -52.0
+offset_right = 12.0
+offset_bottom = -32.0
+text = "!"
+horizontal_alignment = 1

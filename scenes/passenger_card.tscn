@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://hawaa_card"]
+
+[ext_resource type="Script" path="res://scripts/passenger_card.gd" id="1_card"]
+
+[node name="PassengerCard" type="Control"]
+script = ExtResource("1_card")

@@ -1,0 +1,101 @@
+[gd_scene load_steps=11 format=3 uid="uid://hawaa_main3d"]
+
+[ext_resource type="Script" path="res://scripts/main_3d.gd" id="1_main"]
+[ext_resource type="Script" path="res://scripts/world_3d.gd" id="2_world"]
+[ext_resource type="Script" path="res://scripts/minimap.gd" id="3_minimap"]
+[ext_resource type="PackedScene" path="res://scenes/auto_3d.tscn" id="4_auto"]
+[ext_resource type="PackedScene" path="res://scenes/passenger_card.tscn" id="5_card"]
+[ext_resource type="Script" path="res://scripts/day_night_cycle.gd" id="6_daynight"]
+
+[sub_resource type="ProceduralSkyMaterial" id="sky_mat"]
+sky_top_color = Color(0.02, 0.01, 0.06, 1.0)
+sky_horizon_color = Color(0.08, 0.04, 0.12, 1.0)
+ground_bottom_color = Color(0.02, 0.02, 0.02, 1.0)
+ground_horizon_color = Color(0.06, 0.03, 0.08, 1.0)
+
+[sub_resource type="Sky" id="sky"]
+sky_material = SubResource("sky_mat")
+
+[sub_resource type="Environment" id="env"]
+background_mode = 2
+sky = SubResource("sky")
+ambient_light_source = 2
+ambient_light_color = Color(0.12, 0.08, 0.06, 1.0)
+ambient_light_energy = 0.15
+tonemap_mode = 2
+tonemap_white = 1.2
+ssao_enabled = true
+ssao_radius = 2.0
+ssao_intensity = 1.5
+glow_enabled = true
+glow_intensity = 0.6
+glow_bloom = 0.15
+fog_enabled = true
+fog_light_color = Color(0.15, 0.1, 0.08, 1.0)
+fog_density = 0.005
+fog_sky_affect = 0.3
+volumetric_fog_enabled = true
+volumetric_fog_density = 0.02
+volumetric_fog_albedo = Color(0.18, 0.12, 0.08, 1.0)
+volumetric_fog_emission = Color(0.1, 0.06, 0.04, 1.0)
+volumetric_fog_emission_energy = 0.5
+volumetric_fog_length = 120.0
+
+[sub_resource type="CameraAttributes" id="cam_attr"]
+
+[node name="Main3D" type="Node3D"]
+script = ExtResource("1_main")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("env")
+camera_attributes = SubResource("cam_attr")
+
+[node name="MoonLight" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.866, -0.25, 0.433, 0, 0.866, 0.5, -0.5, -0.433, 0.75, 0, 40, 0)
+light_color = Color(0.6, 0.65, 0.85, 1.0)
+light_energy = 0.25
+shadow_enabled = true
+directional_shadow_max_distance = 120.0
+
+[node name="DayNightCycle" type="Node" parent="."]
+script = ExtResource("6_daynight")
+cycle_duration = 360.0
+
+[node name="World3D" type="Node3D" parent="."]
+script = ExtResource("2_world")
+
+[node name="Auto3D" parent="." instance=ExtResource("4_auto")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 60)
+
+[node name="HUD" type="CanvasLayer" parent="."]
+
+[node name="Minimap" type="Control" parent="HUD"]
+anchor_left = 1.0
+anchor_right = 1.0
+anchor_top = 0.0
+anchor_bottom = 0.0
+offset_left = -165.0
+offset_top = 15.0
+offset_right = -15.0
+offset_bottom = 165.0
+script = ExtResource("3_minimap")
+
+[node name="PassengerCard" parent="HUD" instance=ExtResource("5_card")]
+
+[node name="Seawoods Station" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -60, 0, 68)
+
+[node name="Nerul Station" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -108, 0, -12)
+
+[node name="Nexus Mall" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -24, 0, 60)
+
+[node name="DY Patil Stadium" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 20, 0, -38)
+
+[node name="Belapur Station" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 148, 0, 52)
+
+[node name="Sanpada Station" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -180, 0, -122)
