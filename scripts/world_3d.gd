@@ -212,7 +212,7 @@ func _build_grid() -> void:
 	astar = AStarGrid2D.new()
 	astar.region = Rect2i(0, 0, Globals.MAP_W, Globals.MAP_H)
 	astar.cell_size = Vector2(Globals.TILE_3D, Globals.TILE_3D)
-	astar.diagonal_mode = AStarGrid2D.DIAGONAL_MODE_NEVER
+	astar.diagonal_mode = AStarGrid2D.DIAGONAL_MODE_ONLY_IF_NO_OBSTACLES
 	astar.update()
 	
 	for y in Globals.MAP_H:
