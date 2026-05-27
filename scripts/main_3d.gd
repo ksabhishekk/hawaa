@@ -3,6 +3,9 @@ extends Node3D
 
 const NPC_COUNT := 8
 
+enum State { IDLE, ON_TRIP }
+var _state := State.IDLE
+
 var _npc_scene := preload("res://scenes/npc_3d.tscn")
 
 var _nearby_npcs:   Array[Node] = []
@@ -14,6 +17,8 @@ func _ready() -> void:
 	$World3D.map_ready.connect(_on_map_ready)
 	$HUD/PassengerCard.accepted.connect(_on_card_accepted)
 	$HUD/PassengerCard.declined.connect(_on_card_declined)
+	$Auto3D.destination_reached.connect(_on_destination_reached)
+	
 	# World3D._ready() fires before Main3D._ready() (bottom-up order),
 	# so the map_ready signal was already emitted. Initialize manually.
 	if not $World3D.grid.is_empty():
@@ -25,7 +30,7 @@ func _on_map_ready(grid: Array) -> void:
 	_world_ready = true
 	var bounds: AABB = $World3D.get_world_bounds()
 	$Auto3D.set_world_bounds(bounds)
-	$HUD/Minimap.setup(grid, $Auto3D)
+	$HUD/Minimap.setup(grid, $Auto3D, $World3D)
 	_spawn_npcs()
 
 func _spawn_npcs() -> void:
@@ -53,6 +58,12 @@ func _on_npc_proximity_exited(npc: Node) -> void:
 	_update_card()
 
 func _update_card() -> void:
+	if _state == State.ON_TRIP:
+		if _active_npc:
+			$HUD/PassengerCard.hide_card()
+			_active_npc = null
+		return
+
 	var nearest := _get_nearest_npc()
 	if nearest == _active_npc:
 		return
@@ -77,7 +88,21 @@ func _get_nearest_npc() -> Node:
 func _on_card_accepted() -> void:
 	if not _active_npc:
 		return
-	print("Route to: ", _active_npc.destination)
+	
+	var dest_name = _active_npc.destination
+	print("Route to: ", dest_name)
+	
+	if $World3D.OSM_LANDMARKS.has(dest_name):
+		var dest_coord: Vector2i = $World3D.OSM_LANDMARKS[dest_name]
+		var dest_pos: Vector3 = $World3D._tile_pos(dest_coord.x, dest_coord.y)
+		var path = $World3D.get_path_points($Auto3D.global_position, dest_pos)
+		
+		$Auto3D.start_automated_trip(path)
+		if $HUD/Minimap.has_method("set_route"):
+			$HUD/Minimap.set_route(path)
+			
+		_state = State.ON_TRIP
+	
 	_nearby_npcs.erase(_active_npc)
 	_active_npc.queue_free()
 	_active_npc = null
@@ -89,3 +114,10 @@ func _on_card_declined() -> void:
 	_declined_npcs.append(_active_npc)
 	_active_npc = null
 	$HUD/PassengerCard.hide_card()
+
+func _on_destination_reached() -> void:
+	print("Destination reached!")
+	_state = State.IDLE
+	if $HUD/Minimap.has_method("clear_route"):
+		$HUD/Minimap.clear_route()
+	_update_card()

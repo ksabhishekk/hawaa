@@ -7,6 +7,8 @@ extends CharacterBody3D
 ## The front-wheel angle determines turning radius via the bicycle model:
 ##   turn_rate = speed × tan(steer_angle) / wheelbase
 
+signal destination_reached
+
 # ── Vehicle geometry ─────────────────────────────────────────────────────────
 const WHEELBASE       := 2.0     # front-to-rear axle distance (metres)
 
@@ -42,6 +44,10 @@ var _heading     := 0.0    # vehicle heading (radians, 0 = +Z)
 var _tilt        := 0.0    # visual body roll
 var _map_bounds  := AABB()
 
+var is_automated := false
+var current_path: Array[Vector3] = []
+var _path_idx := 0
+
 @onready var _camera: Camera3D = $ChaseCamera
 
 func _ready() -> void:
@@ -52,15 +58,50 @@ func _physics_process(delta: float) -> void:
 	var steer_input := 0.0
 
 	# ── Gather input ─────────────────────────────────────────────────────
-	if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP):
-		throttle = 1.0
-	if Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN):
-		throttle -= 1.0
-
-	if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT):
-		steer_input = 1.0
-	if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT):
-		steer_input = -1.0
+	if is_automated:
+		if _path_idx < current_path.size():
+			var target: Vector3 = current_path[_path_idx]
+			var to_target := target - global_position
+			to_target.y = 0.0
+			var dist := to_target.length()
+			
+			if dist < 4.5:
+				_path_idx += 1
+			else:
+				var target_heading := atan2(to_target.x, to_target.z)
+				var heading_diff := wrapf(target_heading - _heading, -PI, PI)
+				steer_input = clampf(heading_diff * 2.5, -1.0, 1.0)
+				
+				var distance_to_final := dist
+				for i in range(_path_idx, current_path.size() - 1):
+					distance_to_final += current_path[i].distance_to(current_path[i+1])
+				
+				if distance_to_final < 12.0:
+					throttle = clampf((distance_to_final - 2.0) / 10.0, -1.0, 0.5)
+					if _speed > distance_to_final:
+						throttle = -1.0
+				else:
+					throttle = 1.0
+					if absf(heading_diff) > 0.4:
+						throttle = 0.2
+		else:
+			throttle = -1.0
+			steer_input = 0.0
+			if absf(_speed) < 0.5:
+				_speed = 0.0
+				is_automated = false
+				current_path.clear()
+				destination_reached.emit()
+	else:
+		if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP):
+			throttle = 1.0
+		if Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN):
+			throttle -= 1.0
+	
+		if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT):
+			steer_input = 1.0
+		if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT):
+			steer_input = -1.0
 
 	# ── Front-wheel angle ────────────────────────────────────────────────
 	# Limit max steer at high speed for stability (like real power steering)
@@ -163,3 +204,11 @@ func _clamp_to_world() -> void:
 
 func set_world_bounds(bounds: AABB) -> void:
 	_map_bounds = bounds
+
+func start_automated_trip(path: Array[Vector3]) -> void:
+	current_path = path
+	_path_idx = 0
+	if current_path.size() > 1:
+		_path_idx = 1
+	if current_path.size() > 0:
+		is_automated = true

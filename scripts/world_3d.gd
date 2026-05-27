@@ -13,6 +13,7 @@ const T_MALL     := 6
 const T_PETROL   := 7
 
 var grid: Array = []
+var astar: AStarGrid2D
 
 signal map_ready(grid: Array)
 
@@ -207,6 +208,13 @@ func _near_road(x: int, y: int) -> bool:
 
 func _build_grid() -> void:
 	grid.resize(Globals.MAP_H)
+	
+	astar = AStarGrid2D.new()
+	astar.region = Rect2i(0, 0, Globals.MAP_W, Globals.MAP_H)
+	astar.cell_size = Vector2(Globals.TILE_3D, Globals.TILE_3D)
+	astar.diagonal_mode = AStarGrid2D.DIAGONAL_MODE_NEVER
+	astar.update()
+	
 	for y in Globals.MAP_H:
 		grid[y] = []
 		grid[y].resize(Globals.MAP_W)
@@ -232,6 +240,10 @@ func _build_grid() -> void:
 					grid[y][x] = T_BUILDING
 				else:
 					grid[y][x] = T_GRASS
+
+			# Set solid in AStar if not a road
+			if grid[y][x] != T_ROAD:
+				astar.set_point_solid(Vector2i(x, y), true)
 
 # ── Position helper ──────────────────────────────────────────────────────────
 
@@ -514,3 +526,40 @@ func get_sidewalk_positions() -> Array[Vector3]:
 func get_world_bounds() -> AABB:
 	var sz := Vector3(Globals.MAP_W * Globals.TILE_3D, 20.0, Globals.MAP_H * Globals.TILE_3D)
 	return AABB(Globals.MAP_ORIGIN, sz)
+
+func get_path_points(start_pos: Vector3, end_pos: Vector3) -> Array[Vector3]:
+	if not astar:
+		return []
+	var sx := clampi(int((start_pos.x - Globals.MAP_ORIGIN.x) / Globals.TILE_3D), 0, Globals.MAP_W - 1)
+	var sy := clampi(int((start_pos.z - Globals.MAP_ORIGIN.z) / Globals.TILE_3D), 0, Globals.MAP_H - 1)
+	var ex := clampi(int((end_pos.x - Globals.MAP_ORIGIN.x) / Globals.TILE_3D), 0, Globals.MAP_W - 1)
+	var ey := clampi(int((end_pos.z - Globals.MAP_ORIGIN.z) / Globals.TILE_3D), 0, Globals.MAP_H - 1)
+	
+	var start_coord := _find_nearest_road(Vector2i(sx, sy))
+	var end_coord := _find_nearest_road(Vector2i(ex, ey))
+
+	var path_coords := astar.get_id_path(start_coord, end_coord)
+	
+	var result: Array[Vector3] = []
+	for id in path_coords:
+		result.append(_tile_pos(id.x, id.y))
+	return result
+
+func _find_nearest_road(start: Vector2i) -> Vector2i:
+	if not astar.is_point_solid(start):
+		return start
+	var queue := [start]
+	var visited := {start: true}
+	var dirs: Array[Vector2i] = [Vector2i.UP, Vector2i.DOWN, Vector2i.LEFT, Vector2i.RIGHT]
+	
+	while not queue.is_empty():
+		var curr: Vector2i = queue.pop_front()
+		if not astar.is_point_solid(curr):
+			return curr
+		for d in dirs:
+			var n: Vector2i = curr + d
+			if n.x >= 0 and n.x < Globals.MAP_W and n.y >= 0 and n.y < Globals.MAP_H:
+				if not visited.has(n):
+					visited[n] = true
+					queue.append(n)
+	return start
