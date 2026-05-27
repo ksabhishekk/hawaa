@@ -48,10 +48,33 @@ var is_automated := false
 var current_path: Array[Vector3] = []
 var _path_idx := 0
 
+var _ray_l: RayCast3D
+var _ray_r: RayCast3D
+var _ray_c: RayCast3D
+
 @onready var _camera: Camera3D = $ChaseCamera
 
 func _ready() -> void:
 	add_to_group("auto")
+	
+	_ray_l = RayCast3D.new()
+	_ray_r = RayCast3D.new()
+	_ray_c = RayCast3D.new()
+	add_child(_ray_l)
+	add_child(_ray_r)
+	add_child(_ray_c)
+	
+	# Whiskers originate from the front of the vehicle
+	var front_z := 1.5
+	var y_pos := 0.5
+	_ray_l.position = Vector3(0.5, y_pos, front_z)
+	_ray_r.position = Vector3(-0.5, y_pos, front_z)
+	_ray_c.position = Vector3(0.0, y_pos, front_z)
+	
+	# Point them forward and slightly outward (Local +Z is forward, +X is left)
+	_ray_l.target_position = Vector3(2.5, 0.0, 4.0)
+	_ray_r.target_position = Vector3(-2.5, 0.0, 4.0)
+	_ray_c.target_position = Vector3(0.0, 0.0, 5.0)
 
 func _physics_process(delta: float) -> void:
 	var throttle    := 0.0
@@ -70,7 +93,14 @@ func _physics_process(delta: float) -> void:
 			else:
 				var target_heading := atan2(to_target.x, to_target.z)
 				var heading_diff := wrapf(target_heading - _heading, -PI, PI)
-				steer_input = clampf(heading_diff * 2.5, -1.0, 1.0)
+				steer_input = heading_diff * 2.5
+				
+				# ── Obstacle Avoidance ──────────────────────────
+				var avoid := 0.0
+				if _ray_l.is_colliding(): avoid -= 1.5 # Steer right
+				if _ray_r.is_colliding(): avoid += 1.5 # Steer left
+				
+				steer_input = clampf(steer_input + avoid, -1.0, 1.0)
 				
 				var distance_to_final := dist
 				for i in range(_path_idx, current_path.size() - 1):
@@ -81,9 +111,35 @@ func _physics_process(delta: float) -> void:
 					if _speed > distance_to_final:
 						throttle = -1.0
 				else:
-					throttle = 1.0
-					if absf(heading_diff) > 0.4:
-						throttle = 0.2
+					# Normal driving top speed limit (~50 km/h)
+					if _speed > 14.0:
+						throttle = 0.0
+					else:
+						throttle = 1.0
+						
+					# Predictive Corner Braking
+					if _path_idx + 1 < current_path.size():
+						var next_target: Vector3 = current_path[_path_idx + 1]
+						var to_next := next_target - global_position
+						var next_heading := atan2(to_next.x, to_next.z)
+						var next_diff := wrapf(next_heading - _heading, -PI, PI)
+						
+						# If a sharp turn is coming up and we are close, hit the brakes!
+						if absf(next_diff) > 0.6 and dist < 10.0:
+							if _speed > 6.0:
+								throttle = -1.0 # Brake hard
+							else:
+								throttle = 0.2  # Coast
+								
+					# Immediate heading correction braking
+					if absf(heading_diff) > 0.5:
+						if _speed > 5.0:
+							throttle = -1.0
+						else:
+							throttle = 0.2
+						
+				if _ray_c.is_colliding():
+					throttle = clampf(throttle - 0.5, -1.0, 0.5)
 		else:
 			throttle = -1.0
 			steer_input = 0.0
