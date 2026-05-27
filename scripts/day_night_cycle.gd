@@ -64,7 +64,7 @@ const AMBIENT_COLOR: Array = [
 
 func _ready() -> void:
 	# Start at early evening for atmospheric first impression
-	time_of_day = 0.85
+	time_of_day = 0.4
 
 	# Find environment and sun
 	var we := get_parent().get_node_or_null("WorldEnvironment")

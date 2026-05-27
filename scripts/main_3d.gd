@@ -8,13 +8,21 @@ var _npc_scene := preload("res://scenes/npc_3d.tscn")
 var _nearby_npcs:   Array[Node] = []
 var _declined_npcs: Array[Node] = []
 var _active_npc:    Node = null
+var _world_ready := false
 
 func _ready() -> void:
 	$World3D.map_ready.connect(_on_map_ready)
 	$HUD/PassengerCard.accepted.connect(_on_card_accepted)
 	$HUD/PassengerCard.declined.connect(_on_card_declined)
+	# World3D._ready() fires before Main3D._ready() (bottom-up order),
+	# so the map_ready signal was already emitted. Initialize manually.
+	if not $World3D.grid.is_empty():
+		_on_map_ready($World3D.grid)
 
 func _on_map_ready(grid: Array) -> void:
+	if _world_ready:
+		return
+	_world_ready = true
 	var bounds: AABB = $World3D.get_world_bounds()
 	$Auto3D.set_world_bounds(bounds)
 	$HUD/Minimap.setup(grid, $Auto3D)

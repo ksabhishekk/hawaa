@@ -1,30 +1,46 @@
 extends CharacterBody3D
-## 3D auto-rickshaw — proper vehicle controls:
-##   W/Up    = accelerate forward
-##   S/Down  = brake / reverse
-##   A/Left  = steer left
-##   D/Right = steer right
-## Camera always follows behind the auto based on heading.
+## 3D auto-rickshaw — bicycle-model vehicle physics for realistic handling.
+##   W / Up    = accelerate
+##   S / Down  = brake / reverse
+##   A / Left  = steer left
+##   D / Right = steer right
+## The front-wheel angle determines turning radius via the bicycle model:
+##   turn_rate = speed × tan(steer_angle) / wheelbase
 
-const MAX_SPEED     := 22.0   # m/s forward
-const REVERSE_SPEED := 8.0    # m/s reverse
-const ACCEL         := 14.0
-const BRAKE_FORCE   := 28.0
-const FRICTION      := 10.0
-const STEER_SPEED   := 2.5    # rad/s
-const TILT_MAX      := deg_to_rad(6.0)
-const TILT_SPEED    := 6.0
+# ── Vehicle geometry ─────────────────────────────────────────────────────────
+const WHEELBASE       := 2.0     # front-to-rear axle distance (metres)
 
-# Chase camera
-const CAM_DIST      := 14.0
-const CAM_HEIGHT    := 7.5
-const CAM_SMOOTH    := 5.0
-const CAM_LOOK_AHEAD := 6.0   # look ahead of the auto, not at it
+# ── Speed limits ─────────────────────────────────────────────────────────────
+const MAX_SPEED       := 18.0    # m/s forward  (~65 km/h)
+const REVERSE_SPEED   := 5.0     # m/s reverse  (~18 km/h)
 
-var _cur_speed  := 0.0
-var _heading    := 0.0   # radians — 0 = +Z direction
-var _tilt       := 0.0
-var _map_bounds := AABB()
+# ── Forces ───────────────────────────────────────────────────────────────────
+const ENGINE_ACCEL    := 10.0    # forward acceleration  (m/s²)
+const BRAKE_DECEL     := 24.0    # braking deceleration  (m/s²)
+const COAST_DRAG      := 1.5     # constant rolling drag when coasting
+const SPEED_DRAG      := 0.08    # additional speed-proportional drag
+
+# ── Steering ─────────────────────────────────────────────────────────────────
+const MAX_STEER_ANGLE := deg_to_rad(38.0)   # max front-wheel deflection
+const STEER_SPEED     := 2.8                 # how fast wheel turns   (rad/s)
+const STEER_RETURN    := 4.5                 # auto-center rate       (rad/s)
+
+# ── Body tilt (3-wheeler lean) ───────────────────────────────────────────────
+const TILT_MAX        := deg_to_rad(7.0)
+const TILT_LERP       := 5.0
+
+# ── Chase camera ─────────────────────────────────────────────────────────────
+const CAM_DIST        := 14.0
+const CAM_HEIGHT      := 7.5
+const CAM_SMOOTH      := 4.5
+const CAM_LOOK_AHEAD  := 5.0
+
+# ── State ────────────────────────────────────────────────────────────────────
+var _speed       := 0.0    # signed forward speed (m/s)
+var _steer_angle := 0.0    # current front-wheel angle (radians)
+var _heading     := 0.0    # vehicle heading (radians, 0 = +Z)
+var _tilt        := 0.0    # visual body roll
+var _map_bounds  := AABB()
 
 @onready var _camera: Camera3D = $ChaseCamera
 
@@ -32,71 +48,93 @@ func _ready() -> void:
 	add_to_group("auto")
 
 func _physics_process(delta: float) -> void:
-	var throttle := 0.0
-	var steer    := 0.0
+	var throttle    := 0.0
+	var steer_input := 0.0
 
-	# ── Input ────────────────────────────────────────────────────────────────
+	# ── Gather input ─────────────────────────────────────────────────────
 	if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP):
 		throttle = 1.0
 	if Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN):
-		throttle -= 1.0   # allows W+S = cancel
+		throttle -= 1.0
 
 	if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT):
-		steer = 1.0
+		steer_input = 1.0
 	if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT):
-		steer = -1.0
+		steer_input = -1.0
 
-	# ── Steering (only when moving) ──────────────────────────────────────────
-	if absf(_cur_speed) > 0.5:
-		var speed_ratio := clampf(absf(_cur_speed) / MAX_SPEED, 0.25, 1.0)
-		var dir_sign := signf(_cur_speed)  # reverse inverts steering
-		_heading += steer * STEER_SPEED * speed_ratio * dir_sign * delta
+	# ── Front-wheel angle ────────────────────────────────────────────────
+	# Limit max steer at high speed for stability (like real power steering)
+	var speed_pct     := clampf(absf(_speed) / MAX_SPEED, 0.0, 1.0)
+	var eff_max_steer := MAX_STEER_ANGLE * (1.0 - speed_pct * 0.6)
 
-	# ── Throttle / brake / friction ──────────────────────────────────────────
-	if throttle > 0.0:
-		# If currently reversing, brake first
-		if _cur_speed < -0.5:
-			_cur_speed = move_toward(_cur_speed, 0.0, BRAKE_FORCE * delta)
-		else:
-			_cur_speed = move_toward(_cur_speed, MAX_SPEED, ACCEL * delta)
-	elif throttle < 0.0:
-		# If currently moving forward, brake first
-		if _cur_speed > 0.5:
-			_cur_speed = move_toward(_cur_speed, 0.0, BRAKE_FORCE * delta)
-		else:
-			_cur_speed = move_toward(_cur_speed, -REVERSE_SPEED, ACCEL * 0.5 * delta)
+	if absf(steer_input) > 0.01:
+		_steer_angle = move_toward(
+			_steer_angle,
+			steer_input * eff_max_steer,
+			STEER_SPEED * delta
+		)
 	else:
-		_cur_speed = move_toward(_cur_speed, 0.0, FRICTION * delta)
+		# Self-centering is faster at speed (castor effect)
+		var ret := STEER_RETURN * (1.0 + speed_pct * 2.0)
+		_steer_angle = move_toward(_steer_angle, 0.0, ret * delta)
 
-	# ── Apply velocity ───────────────────────────────────────────────────────
+	# ── Throttle / brake / coast ─────────────────────────────────────────
+	if throttle > 0.0:
+		if _speed < -0.3:
+			# Braking out of reverse
+			_speed = move_toward(_speed, 0.0, BRAKE_DECEL * delta)
+		else:
+			# Torque curve: acceleration tapers toward top speed
+			var accel := ENGINE_ACCEL * (1.0 - speed_pct * 0.4)
+			_speed = minf(_speed + accel * delta, MAX_SPEED)
+
+	elif throttle < 0.0:
+		if _speed > 0.3:
+			# Braking from forward
+			_speed = move_toward(_speed, 0.0, BRAKE_DECEL * delta)
+		else:
+			_speed = maxf(_speed - ENGINE_ACCEL * 0.35 * delta, -REVERSE_SPEED)
+
+	else:
+		# Coasting — rolling resistance + proportional drag
+		var drag := COAST_DRAG + SPEED_DRAG * absf(_speed)
+		_speed = move_toward(_speed, 0.0, drag * delta)
+
+	# ── Bicycle-model heading update ─────────────────────────────────────
+	# turn_rate = v · tan(δ) / L   where δ = steer angle, L = wheelbase
+	if absf(_speed) > 0.05:
+		var turn_rate := _speed * tan(_steer_angle) / WHEELBASE
+		_heading += turn_rate * delta
+
+	# ── Apply movement ───────────────────────────────────────────────────
 	var forward := Vector3(sin(_heading), 0.0, cos(_heading))
-	velocity = forward * _cur_speed
-	velocity.y = -5.0   # keep grounded
+	velocity = forward * _speed
+	velocity.y = -5.0   # gravity clamp
 
 	move_and_slide()
 	_clamp_to_world()
 
-	# ── Visuals ──────────────────────────────────────────────────────────────
+	# ── Visuals ──────────────────────────────────────────────────────────
 	rotation.y = -_heading
 
-	# Body tilt when steering
+	# Body tilt driven by lateral (centripetal) acceleration
 	var tilt_target := 0.0
-	if absf(_cur_speed) > 1.0:
-		tilt_target = steer * TILT_MAX * clampf(absf(_cur_speed) / MAX_SPEED, 0.0, 1.0)
-	_tilt = lerpf(_tilt, tilt_target, TILT_SPEED * delta)
+	if absf(_speed) > 0.5:
+		var lat_accel := _speed * _speed * tan(_steer_angle) / WHEELBASE
+		tilt_target = clampf(lat_accel * 0.012, -1.0, 1.0) * TILT_MAX
+	_tilt = lerpf(_tilt, tilt_target, TILT_LERP * delta)
 	$RickshawModel.rotation.z = _tilt
 
-	# ── Camera ───────────────────────────────────────────────────────────────
+	# ── Camera ───────────────────────────────────────────────────────────
 	_update_camera(delta)
 
 func _update_camera(delta: float) -> void:
 	var cam_dir := Vector3(sin(_heading), 0.0, cos(_heading))
 	var behind  := -cam_dir * CAM_DIST
-	var target_pos := global_position + behind + Vector3(0.0, CAM_HEIGHT, 0.0)
-	_camera.global_position = _camera.global_position.lerp(target_pos, CAM_SMOOTH * delta)
-	# Look ahead of the auto, not directly at it
-	var look_target := global_position + cam_dir * CAM_LOOK_AHEAD + Vector3(0.0, 1.2, 0.0)
-	_camera.look_at(look_target)
+	var target  := global_position + behind + Vector3(0.0, CAM_HEIGHT, 0.0)
+	_camera.global_position = _camera.global_position.lerp(target, CAM_SMOOTH * delta)
+	var look_at_pos := global_position + cam_dir * CAM_LOOK_AHEAD + Vector3(0.0, 1.2, 0.0)
+	_camera.look_at(look_at_pos)
 
 func _clamp_to_world() -> void:
 	if _map_bounds.size.length() < 1.0:
@@ -106,10 +144,10 @@ func _clamp_to_world() -> void:
 	p.z = clampf(p.z, _map_bounds.position.z, _map_bounds.end.z)
 	if p.x != global_position.x:
 		velocity.x = 0.0
-		_cur_speed *= 0.5
+		_speed *= 0.5
 	if p.z != global_position.z:
 		velocity.z = 0.0
-		_cur_speed *= 0.5
+		_speed *= 0.5
 	global_position = p
 
 func set_world_bounds(bounds: AABB) -> void:
