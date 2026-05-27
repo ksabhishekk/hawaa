@@ -108,14 +108,25 @@ func _physics_process(delta: float) -> void:
 
 	# ── Apply movement ───────────────────────────────────────────────────
 	var forward := Vector3(sin(_heading), 0.0, cos(_heading))
-	velocity = forward * _speed
-	velocity.y = -5.0   # gravity clamp
+	
+	velocity.x = forward.x * _speed
+	velocity.z = forward.z * _speed
+	if not is_on_floor():
+		velocity.y -= 9.8 * delta
+	else:
+		velocity.y = -0.1
 
 	move_and_slide()
+	
+	# Re-sync speed in case we hit a wall
+	var actual_hz := Vector2(velocity.x, velocity.z)
+	var forward_hz := Vector2(forward.x, forward.z)
+	_speed = actual_hz.dot(forward_hz)
+
 	_clamp_to_world()
 
 	# ── Visuals ──────────────────────────────────────────────────────────
-	rotation.y = -_heading
+	rotation.y = _heading
 
 	# Body tilt driven by lateral (centripetal) acceleration
 	var tilt_target := 0.0
